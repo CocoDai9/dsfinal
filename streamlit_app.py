@@ -5,7 +5,6 @@ from sklearn.preprocessing import LabelEncoder
 df = pd.read_csv("mushrooms.csv")
 
 label_encoders = {}
-
 df_encoded = df.copy()
 
 for column in df.columns:
@@ -13,10 +12,25 @@ for column in df.columns:
     df_encoded[column] = le.fit_transform(df[column])
     label_encoders[column] = le
 
-st.write("Encoded Dataset:")
+# ===== 数据展示 =====
+st.write("## Encoded Dataset")
 st.dataframe(df_encoded.head())
 
-st.write("Encoding Mapping:")
+# ===== 保存文件到本地 =====
+df_encoded.to_csv("mushrooms_encoded.csv", index=False)
+
+# ===== 下载按钮（只保留一个）=====
+csv = df_encoded.to_csv(index=False).encode('utf-8')
+
+st.download_button(
+    label="Download Encoded CSV",
+    data=csv,
+    file_name='mushrooms_encoded.csv',
+    mime='text/csv',
+)
+
+# ===== Mapping（完全保留）=====
+st.write("## 🔁 Encoding Mapping (Letter → Number)")
 
 for col in df.columns:
     mapping = dict(zip(
