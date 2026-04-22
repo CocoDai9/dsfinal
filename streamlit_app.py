@@ -1,14 +1,22 @@
 import pandas as pd
 import numpy as np
 import streamlit as st
+import matplotlib.pyplot as plt
+import seaborn as sns
 import plotly.graph_objects as go
 
+# ─────────────────────────────────────────────────────────
+# PAGE CONFIG
+# ─────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="Mushroom Dashboard",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
+# ─────────────────────────────────────────────────────────
+# STYLE
+# ─────────────────────────────────────────────────────────
 st.markdown("""
 <style>
 html, body,
@@ -26,52 +34,6 @@ html, body,
 }
 [data-testid="stSidebar"] * { color: #cccccc !important; }
 
-[data-testid="stSidebar"] [role="radiogroup"] { gap: 4px !important; }
-[data-testid="stSidebar"] [role="radiogroup"] label {
-    display: flex !important;
-    align-items: center !important;
-    padding: 10px 14px !important;
-    border-radius: 8px !important;
-    font-size: 14px !important;
-    font-weight: 500 !important;
-    color: #888 !important;
-    cursor: pointer !important;
-    transition: all .15s !important;
-}
-[data-testid="stSidebar"] [role="radiogroup"] label:hover {
-    background: #1e1e1e !important;
-    color: #fff !important;
-}
-[data-testid="stSidebar"] [role="radiogroup"] label:has(input:checked) {
-    background: #2a1515 !important;
-    color: #e04040 !important;
-}
-[data-testid="stSidebar"] [role="radiogroup"] input[type="radio"] {
-    display: none !important;
-}
-
-[data-testid="stTabs"] [role="tablist"] {
-    border-bottom: 1px solid #252525 !important;
-    background: transparent !important;
-    gap: 0 !important;
-}
-[data-testid="stTabs"] [role="tab"] {
-    font-size: 13px !important;
-    font-weight: 600 !important;
-    color: #555 !important;
-    padding: 9px 18px !important;
-    border: none !important;
-    border-bottom: 2px solid transparent !important;
-    background: transparent !important;
-    border-radius: 0 !important;
-}
-[data-testid="stTabs"] [role="tab"][aria-selected="true"] {
-    color: #e04040 !important;
-    border-bottom: 2px solid #e04040 !important;
-}
-[data-testid="stTabs"] [role="tab"]:hover { color: #ccc !important; }
-[data-testid="stTabs"] [data-baseweb="tab-highlight"] { display: none !important; }
-
 [data-testid="stMetric"] {
     background: #191919 !important;
     border: 1px solid #252525 !important;
@@ -88,75 +50,200 @@ html, body,
     font-weight: 700 !important;
 }
 
-[data-testid="stSelectbox"] label {
-    color: #888 !important;
-    font-size: 12px !important;
-}
-[data-testid="stSelectbox"] div[data-baseweb="select"] > div {
-    background: #1a1a1a !important;
-    border-color: #2e2e2e !important;
-    border-radius: 8px !important;
-}
-[data-testid="stSelectbox"] span { color: #ddd !important; }
-
-[data-testid="stSlider"] label {
-    color: #888 !important;
-    font-size: 12px !important;
+[data-testid="stTabs"] [role="tablist"] {
+    border-bottom: 1px solid #252525 !important;
+    gap: 16px !important;
+    flex-wrap: wrap !important;
 }
 
-[data-testid="stDataFrame"] {
-    border-radius: 10px !important;
-    overflow: hidden !important;
-}
-[data-testid="stDataFrame"] table {
-    background: #1a1a1a !important;
+[data-testid="stTabs"] [role="tab"] {
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    color: #666 !important;
+    padding: 10px 6px !important;
+    margin-right: 6px !important;
 }
 
-hr { border-color: #252525 !important; }
+[data-testid="stTabs"] [role="tab"][aria-selected="true"] {
+    color: #e04040 !important;
+}
 
 .sec-title {
-    font-size: 24px;
+    font-size: 28px;
     font-weight: 800;
-    color: #fff;
-    margin-top: .8rem;
+    color: #ffffff;
+    margin-top: .5rem;
     margin-bottom: 4px;
     letter-spacing: -.02em;
 }
 .sec-sub {
-    font-size: 13px;
-    color: #666;
-    margin-bottom: 1.4rem;
+    font-size: 14px;
+    color: #8d8d8d;
+    margin-bottom: 1.2rem;
     line-height: 1.6;
 }
 </style>
 """, unsafe_allow_html=True)
 
-
+# ─────────────────────────────────────────────────────────
+# LOAD DATA
+# ─────────────────────────────────────────────────────────
 @st.cache_data
 def load_data():
-    df = pd.read_csv("mushrooms_encodedcopy.csv")
-    df["class_label"] = df["class"].map({0: "Edible", 1: "Poisonous"})
-    return df
-
+    data = pd.read_csv("mushrooms_encodedcopy.csv")
+    data["class_label"] = data["class"].map({0: "Edible", 1: "Poisonous"})
+    return data
 
 df = load_data()
 df_clean = df.drop(columns=["veil-type", "class_label"], errors="ignore")
 
+# ─────────────────────────────────────────────────────────
+# LABEL MAP
+# ─────────────────────────────────────────────────────────
+label_map = {
+    "class": {
+        0: "e = edible",
+        1: "p = poisonous",
+    },
+    "cap-shape": {
+        0: "b = bell",
+        1: "c = conical",
+        2: "x = convex",
+        3: "f = flat",
+        4: "k = knobbed",
+        5: "s = sunken",
+    },
+    "cap-surface": {
+        0: "f = fibrous",
+        1: "g = grooves",
+        2: "y = scaly",
+        3: "s = smooth",
+    },
+    "cap-color": {
+        0: "n = brown",
+        1: "b = buff",
+        2: "c = cinnamon",
+        3: "g = gray",
+        4: "r = green",
+        5: "p = pink",
+        6: "u = purple",
+        7: "e = red",
+        8: "w = white",
+        9: "y = yellow",
+    },
+    "bruises": {
+        0: "f = no",
+        1: "t = bruises",
+    },
+    "odor": {
+        0: "a = almond",
+        1: "l = anise",
+        2: "c = creosote",
+        3: "y = fishy",
+        4: "f = foul",
+        5: "m = musty",
+        6: "n = none",
+        7: "p = pungent",
+        8: "s = spicy",
+    },
+    "gill-attachment": {
+        0: "a = attached",
+        1: "d = descending",
+        2: "f = free",
+        3: "n = notched",
+    },
+    "gill-spacing": {
+        0: "c = close",
+        1: "w = crowded",
+        2: "d = distant",
+    },
+    "gill-size": {
+        0: "b = broad",
+        1: "n = narrow",
+    },
+    "gill-color": {
+        0: "b = buff",
+        1: "e = red",
+        2: "g = gray",
+        3: "h = chocolate",
+        4: "k = black",
+        5: "n = brown",
+        6: "o = orange",
+        7: "p = pink",
+        8: "r = green",
+        9: "u = purple",
+        10: "w = white",
+        11: "y = yellow",
+    },
+    "stalk-color-above-ring": {
+        0: "b = buff",
+        1: "c = cinnamon",
+        2: "e = red",
+        3: "g = gray",
+        4: "n = brown",
+        5: "o = orange",
+        6: "p = pink",
+        7: "w = white",
+        8: "y = yellow",
+    },
+    "stalk-color-below-ring": {
+        0: "b = buff",
+        1: "c = cinnamon",
+        2: "e = red",
+        3: "g = gray",
+        4: "n = brown",
+        5: "o = orange",
+        6: "p = pink",
+        7: "w = white",
+        8: "y = yellow",
+    },
+    "veil-type": {
+        0: "p = partial",
+    },
+    "veil-color": {
+        0: "n = brown",
+        1: "o = orange",
+        2: "w = white",
+        3: "y = yellow",
+    },
+    "ring-number": {
+        0: "n = none",
+        1: "o = one",
+        2: "t = two",
+    },
+    "ring-type": {
+        0: "e = evanescent",
+        1: "f = flaring",
+        2: "l = large",
+        3: "n = none",
+        4: "p = pendant",
+    },
+    "spore-print-color": {
+        0: "b = buff",
+        1: "h = chocolate",
+        2: "k = black",
+        3: "n = brown",
+        4: "o = orange",
+        5: "r = green",
+        6: "u = purple",
+        7: "w = white",
+        8: "y = yellow",
+    },
+}
+
+# ─────────────────────────────────────────────────────────
+# PLOTLY SETTINGS
+# ─────────────────────────────────────────────────────────
 CARD = "#ffffff"
 GRID = "rgba(200,200,200,0.35)"
 TICK = "#555"
 GREEN = "#1D9E75"
 RED = "#D85A30"
-BLUE = "#378ADD"
-PURPLE = "#534AB7"
 GREEN_A = "rgba(29,158,117,0.65)"
 RED_A = "rgba(216,90,48,0.65)"
-PUR_A = "rgba(83,74,183,0.75)"
-PALETTE = [BLUE, "#E87722", GREEN, RED, PURPLE, "#888880"]
 CFG = {"displayModeBar": False}
 
-
-def card_layout(title="", xlab="", ylab="", height=380):
+def card_layout(title="", xlab="", ylab="", height=420):
     return dict(
         title=dict(text=title, font=dict(size=12, color=TICK), x=0.5),
         paper_bgcolor=CARD,
@@ -169,55 +256,48 @@ def card_layout(title="", xlab="", ylab="", height=380):
         height=height,
     )
 
-
-def pie_layout(title="", height=280):
-    return dict(
-        title=dict(text=title, font=dict(size=12, color=TICK), x=0.5),
-        paper_bgcolor=CARD,
-        plot_bgcolor=CARD,
-        font=dict(color=TICK, size=11),
-        showlegend=True,
-        legend=dict(orientation="h", y=-0.18, font=dict(size=10)),
-        margin=dict(l=10, r=10, t=40, b=40),
-        height=height,
-    )
-
-
-page = "Data Overview"
-
+# ─────────────────────────────────────────────────────────
+# SIDEBAR
+# ─────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown(
-        '<div style="padding:8px 4px 4px">'
-        '<span style="font-size:16px;font-weight:800;color:#fff">Mushroom</span>'
-        '<div style="font-size:11px;color:#555;margin-top:2px">Dataset Dashboard</div>'
-        '</div>',
+        """
+        <div style="padding:8px 4px 4px">
+            <span style="font-size:18px;font-weight:800;color:#fff">Mushroom Dashboard</span>
+            <div style="font-size:11px;color:#666;margin-top:2px">Final Project</div>
+        </div>
+        """,
         unsafe_allow_html=True,
     )
+
     st.markdown("---")
 
     page = st.radio(
-        "nav",
+        "Navigation",
         ["Data Overview", "Visualizations"],
         label_visibility="collapsed",
     )
 
     st.markdown("---")
     st.markdown(
-        '<div style="font-size:11px;color:#444;line-height:1.9;padding:0 4px">'
-        'Source: UCI Mushroom Dataset'
-        '<br><br>'
-        'Group members<br>'
-        '<span style="color:#666">Coco Dai<br>Nadalia Jin<br>Solomon Kim</span>'
-        '</div>',
+        """
+        <div style="font-size:11px;color:#555;line-height:1.9;padding:0 4px">
+            Source: UCI Mushroom Dataset
+            <br><br>
+            Group Members<br>
+            <span style="color:#777">Coco Dai<br>Nadalia Jin<br>Solomon Kim</span>
+        </div>
+        """,
         unsafe_allow_html=True,
     )
 
-
+# ─────────────────────────────────────────────────────────
+# DATA OVERVIEW
+# ─────────────────────────────────────────────────────────
 if page == "Data Overview":
     st.markdown('<div class="sec-title">Data Overview</div>', unsafe_allow_html=True)
     st.markdown(
-        '<div class="sec-sub">Summary statistics, data sample, missing values and column profiles '
-        'for the UCI Mushroom dataset.</div>',
+        '<div class="sec-sub">Summary statistics, data sample, and missing values for the UCI Mushroom dataset.</div>',
         unsafe_allow_html=True,
     )
 
@@ -226,14 +306,14 @@ if page == "Data Overview":
     m2.metric("Columns", f"{len(df.columns) - 1}")
     m3.metric("Edible", f"{(df['class'] == 0).sum():,}")
     m4.metric("Poisonous", f"{(df['class'] == 1).sum():,}")
-    m5.metric("Missing values", f"{df.isnull().sum().sum():,}")
+    m5.metric("Missing Values", f"{df.isnull().sum().sum():,}")
 
     st.markdown("---")
 
     left, right = st.columns([3, 2])
 
     with left:
-        st.markdown("#### Data sample")
+        st.subheader("Data Sample")
         n_rows = st.slider("Rows to preview", 5, 50, 10, step=5)
         st.dataframe(
             df.drop(columns=["class_label"]).head(n_rows),
@@ -242,7 +322,7 @@ if page == "Data Overview":
         )
 
     with right:
-        st.markdown("#### Descriptive statistics")
+        st.subheader("Descriptive Statistics")
         st.markdown("")
         st.markdown("---")
         desc = df_clean.describe().round(3)
@@ -250,245 +330,150 @@ if page == "Data Overview":
 
     st.markdown("---")
 
-    st.markdown("#### Missing values per column")
-    missing = df.drop(columns=["class_label"]).isnull().sum()
-    missing_pct = (missing / len(df) * 100).round(2)
+    st.subheader("Missing Values per Column")
+    missing = df.drop(columns=["class_label"]).isnull().sum().reset_index()
+    missing.columns = ["Column", "Missing Count"]
 
-    fig_miss = go.Figure(go.Bar(
-        x=missing.index.tolist(),
-        y=missing_pct.values.tolist(),
-        marker=dict(
-            color=[RED if v > 0 else GREEN for v in missing_pct.values],
-            line=dict(width=0),
-        ),
-        text=[f"{v:.1f}%" for v in missing_pct.values],
-        textposition="outside",
-        hovertemplate="<b>%{x}</b><br>Missing: %{y:.2f}%<extra></extra>",
-    ))
-    fig_miss.update_layout(**card_layout(
-        title="Missing value rate (%) by column",
-        xlab="Column",
-        ylab="Missing %",
-        height=320,
-    ))
-    fig_miss.update_layout(yaxis_range=[0, max(missing_pct.max() + 5, 10)])
-    st.plotly_chart(fig_miss, use_container_width=True, config=CFG)
+    fig, ax = plt.subplots(figsize=(10, 4))
+    sns.barplot(data=missing, x="Column", y="Missing Count", hue="Column", palette="viridis", legend=False, ax=ax)
+    ax.set_title("Missing Values by Column")
+    ax.set_xlabel("Column")
+    ax.set_ylabel("Missing Count")
+    plt.xticks(rotation=45)
+    st.pyplot(fig)
 
-    st.markdown("---")
+    st.caption("The dataset contains no missing values across all recorded features.")
 
-    # st.markdown("#### Column profiles")
-    # raw = df.drop(columns=["class_label"])
-    # profile_rows = []
-
-    # for col in raw.columns:
-    #     profile_rows.append({
-    #         "Column": col,
-    #         "Dtype": str(raw[col].dtype),
-    #         "Unique": int(raw[col].nunique()),
-    #         "Missing": int(raw[col].isnull().sum()),
-    #         "Min": raw[col].min(),
-    #         "Max": raw[col].max(),
-    #         "Mean": round(raw[col].mean(), 3),
-    #         "Std": round(raw[col].std(), 3),
-    #     })
-
-    # profile_df = pd.DataFrame(profile_rows).set_index("Column")
-
-    # def highlight_profile(row):
-    #     if row["Unique"] == 1:
-    #         return ["background-color:#2e1010;color:#e04040"] * len(row)
-    #     elif row["Missing"] > 0:
-    #         return ["background-color:#2e1a0d;color:#E87722"] * len(row)
-    #     return [""] * len(row)
-
-    # styled = profile_df.style.apply(highlight_profile, axis=1)
-    # st.dataframe(styled, use_container_width=True, height=460)
-
-    # st.markdown(
-    #     '<div style="font-size:11px;color:#444;margin-top:6px">'
-    #     'Red row = zero-variance column (veil-type, excluded from visualizations) · '
-    #     'Orange row = columns with missing values'
-    #     '</div>',
-    #     unsafe_allow_html=True,
-    # )
-
-    st.markdown("---")
-    
+# ─────────────────────────────────────────────────────────
+# VISUALIZATIONS
+# ─────────────────────────────────────────────────────────
 else:
     st.markdown('<div class="sec-title">Visualizations</div>', unsafe_allow_html=True)
     st.markdown(
-        '<div class="sec-sub">Explore relationships between variables using five chart types. '
-        'All charts show edible vs poisonous split where applicable.</div>',
+        '<div class="sec-sub">Explore patterns in the mushroom dataset through five core chart types.</div>',
         unsafe_allow_html=True,
     )
 
-    tab_uni, tab_scatter, tab_heatmap = st.tabs([
-        "Univariate  (Pie · Bar · Histogram · Boxplot)",
+    with st.expander("Label Guide: what the encoded numbers mean"):
+        st.markdown("""
+        The dataset was label-encoded, so values such as 0, 1, 2, and 3 represent original category labels.
+
+        **Common variables used in this dashboard**
+        - `class`: 0 = edible, 1 = poisonous
+        - `bruises`: 0 = no, 1 = bruises
+        - `gill-size`: 0 = broad, 1 = narrow
+        """)
+
+        for feature, mapping in label_map.items():
+            st.markdown(f"**{feature}**")
+            mapping_text = "  \n".join([f"- {k}: {v}" for k, v in mapping.items()])
+            st.markdown(mapping_text)
+
+    tab_pie, tab_bar, tab_hist, tab_scatter, tab_heatmap = st.tabs([
+        "Pie Charts",
+        "Bar Chart",
+        "Histogram",
         "Scatterplot",
-        "Correlation Heatmap",
+        "Correlation Heatmap"
     ])
 
-    with tab_uni:
-        chart_type = st.radio(
-            "Chart type",
-            ["Pie Charts", "Bar Chart", "Histogram", "Boxplot"],
-            horizontal=True,
-            label_visibility="collapsed",
+    # ── PIE CHARTS ─────────────────────────────────────
+    with tab_pie:
+        st.subheader("Category Distribution")
+
+        fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+
+        df["class"].value_counts().sort_index().plot.pie(
+            autopct="%1.1f%%",
+            ax=axes[0],
+            colors=["#66c2a5", "#fc8d62"]
+        )
+        axes[0].set_title("Class Distribution")
+        axes[0].set_ylabel("")
+
+        df["bruises"].value_counts().sort_index().plot.pie(
+            autopct="%1.1f%%",
+            ax=axes[1],
+            colors=["#8da0cb", "#e78ac3"]
+        )
+        axes[1].set_title("Bruises Distribution")
+        axes[1].set_ylabel("")
+
+        df["gill-size"].value_counts().sort_index().plot.pie(
+            autopct="%1.1f%%",
+            ax=axes[2],
+            colors=["#a6d854", "#ffd92f"]
+        )
+        axes[2].set_title("Gill Size Distribution")
+        axes[2].set_ylabel("")
+
+        st.pyplot(fig)
+
+        with st.expander("Label guide for pie chart variables"):
+            for feature in ["class", "bruises", "gill-size"]:
+                if feature in label_map:
+                    st.markdown(f"**{feature}**")
+                    for k, v in label_map[feature].items():
+                        st.write(f"{k}: {v}")
+
+    # ── BAR CHART ──────────────────────────────────────
+    with tab_bar:
+        st.subheader("Feature Count by Class")
+
+        feature = st.selectbox(
+            "Select a feature",
+            [c for c in df_clean.columns if c != "class"],
+            key="bar_feature"
         )
 
-        st.markdown("---")
+        if feature in label_map:
+            with st.expander(f"Label guide for {feature}"):
+                for k, v in label_map[feature].items():
+                    st.write(f"{k}: {v}")
 
-        if chart_type == "Pie Charts":
-            st.markdown(
-                '<div class="sec-sub">Proportion of each category value across the dataset.</div>',
-                unsafe_allow_html=True,
-            )
+        with st.expander("Label guide for class"):
+            for k, v in label_map["class"].items():
+                st.write(f"{k}: {v}")
 
-            pie_feats = {
-                "Class (edible vs poisonous)": (
-                    lambda: (["Edible (0)", "Poisonous (1)"],
-                             df["class"].value_counts().sort_index().values.tolist())),
-                "Gill size": (
-                    lambda: ([f"Value {i}" for i in df["gill-size"].value_counts().sort_index().index],
-                             df["gill-size"].value_counts().sort_index().values.tolist())),
-                "Bruises": (
-                    lambda: (["No bruises (0)", "Bruises (1)"],
-                             df["bruises"].value_counts().sort_index().values.tolist())),
-                "Ring type": (
-                    lambda: ([f"Type {i}" for i in df["ring-type"].value_counts().sort_index().index],
-                             df["ring-type"].value_counts().sort_index().values.tolist())),
-                "Cap shape": (
-                    lambda: ([f"Shape {i}" for i in df["cap-shape"].value_counts().sort_index().index],
-                             df["cap-shape"].value_counts().sort_index().values.tolist())),
-                "Stalk root": (
-                    lambda: ([f"Root {i}" for i in df["stalk-root"].value_counts().sort_index().index],
-                             df["stalk-root"].value_counts().sort_index().values.tolist())),
-            }
+        count_df = df.groupby([feature, "class"]).size().reset_index(name="Count")
 
-            def make_pie(labels, values, title):
-                fig = go.Figure(go.Pie(
-                    labels=labels,
-                    values=values,
-                    hole=0.42,
-                    marker=dict(colors=PALETTE[:len(labels)], line=dict(color="#fff", width=2)),
-                    textinfo="label+percent",
-                    textfont=dict(size=11, color="#333"),
-                    hovertemplate="<b>%{label}</b><br>Count: %{value:,}<br>%{percent}<extra></extra>",
-                ))
-                fig.update_layout(**pie_layout(title=title, height=280))
-                return fig
+        fig, ax = plt.subplots(figsize=(10, 5))
+        sns.barplot(data=count_df, x=feature, y="Count", hue="class", ax=ax)
+        ax.set_title(f"{feature} by Class")
+        ax.set_xlabel(feature)
+        ax.set_ylabel("Count")
+        plt.xticks(rotation=45)
+        st.pyplot(fig)
 
-            keys = list(pie_feats.keys())
-            r1 = st.columns(3)
-            for i, col in enumerate(r1):
-                lbl, val = pie_feats[keys[i]]()
-                col.plotly_chart(make_pie(lbl, val, keys[i]), use_container_width=True, config=CFG)
+    # ── HISTOGRAM ──────────────────────────────────────
+    with tab_hist:
+        st.subheader("Feature Distribution")
 
-            r2 = st.columns(3)
-            for i, col in enumerate(r2):
-                lbl, val = pie_feats[keys[i + 3]]()
-                col.plotly_chart(make_pie(lbl, val, keys[i + 3]), use_container_width=True, config=CFG)
+        hist_feature = st.selectbox(
+            "Select a feature",
+            [c for c in df_clean.columns if c != "class"],
+            key="hist_feature"
+        )
 
-        elif chart_type == "Bar Chart":
-            st.markdown(
-                '<div class="sec-sub">Grouped bar chart — count of edible vs poisonous per feature value.</div>',
-                unsafe_allow_html=True,
-            )
+        if hist_feature in label_map:
+            with st.expander(f"Label guide for {hist_feature}"):
+                for k, v in label_map[hist_feature].items():
+                    st.write(f"{k}: {v}")
 
-            bar_feats = [c for c in df_clean.columns if c != "class"]
-            bar_feat = st.selectbox("Select feature", bar_feats, key="bar_feat")
+        with st.expander("Label guide for class"):
+            for k, v in label_map["class"].items():
+                st.write(f"{k}: {v}")
 
-            fig = go.Figure()
-            for cls, label, color in [(0, "Edible", GREEN_A), (1, "Poisonous", RED_A)]:
-                counts = df[df["class"] == cls][bar_feat].value_counts().sort_index()
-                fig.add_trace(go.Bar(
-                    x=[str(v) for v in counts.index],
-                    y=counts.values,
-                    name=label,
-                    marker_color=color,
-                    hovertemplate=f"<b>{label}</b><br>Value: %{{x}}<br>Count: %{{y:,}}<extra></extra>",
-                ))
+        fig, ax = plt.subplots(figsize=(10, 5))
+        sns.histplot(data=df, x=hist_feature, hue="class", multiple="layer", kde=False, ax=ax)
+        ax.set_title(f"Distribution of {hist_feature}")
+        ax.set_xlabel(hist_feature)
+        ax.set_ylabel("Frequency")
+        st.pyplot(fig)
 
-            fig.update_layout(**card_layout(
-                title=f"{bar_feat} — edible vs poisonous",
-                xlab=bar_feat,
-                ylab="Count",
-                height=420,
-            ))
-            fig.update_layout(barmode="group", bargap=0.2)
-            st.plotly_chart(fig, use_container_width=True, config=CFG)
-
-        elif chart_type == "Histogram":
-            st.markdown(
-                '<div class="sec-sub">Overlapping frequency distributions — purple = edible, coral = poisonous.</div>',
-                unsafe_allow_html=True,
-            )
-
-            hist_feats = [c for c in df_clean.columns if c != "class"]
-            hist_feat = st.selectbox("Select feature", hist_feats, key="hist_feat")
-
-            fig = go.Figure()
-            for cls, label, color in [(0, "Edible", PUR_A), (1, "Poisonous", RED_A)]:
-                counts = df[df["class"] == cls][hist_feat].value_counts().sort_index()
-                fig.add_trace(go.Bar(
-                    x=[str(v) for v in counts.index],
-                    y=counts.values,
-                    name=label,
-                    marker_color=color,
-                    hovertemplate=f"<b>{label}</b><br>Value: %{{x}}<br>Count: %{{y:,}}<extra></extra>",
-                ))
-
-            fig.update_layout(**card_layout(
-                title=f"{hist_feat} — frequency by class",
-                xlab=hist_feat,
-                ylab="Count",
-                height=420,
-            ))
-            fig.update_layout(barmode="overlay")
-            st.plotly_chart(fig, use_container_width=True, config=CFG)
-
-        else:
-            st.markdown(
-                '<div class="sec-sub">IQR and whiskers for multi-value features — edible vs poisonous.</div>',
-                unsafe_allow_html=True,
-            )
-
-            box_feats = [c for c in df_clean.columns if c != "class" and df_clean[c].nunique() >= 3]
-            box_feat = st.selectbox("Select feature", box_feats, key="box_feat")
-
-            fig = go.Figure()
-            for cls, label, color in [(0, "Edible", GREEN), (1, "Poisonous", RED)]:
-                r, g, b = int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16)
-                fig.add_trace(go.Box(
-                    y=df[df["class"] == cls][box_feat],
-                    name=label,
-                    marker_color=color,
-                    boxmean="sd",
-                    line=dict(width=2),
-                    fillcolor=f"rgba({r},{g},{b},0.25)",
-                    whiskerwidth=0.6,
-                    hovertemplate=(
-                        f"<b>{label}</b><br>"
-                        "Q1: %{q1:.2f}<br>Median: %{median:.2f}<br>"
-                        "Q3: %{q3:.2f}<br>Min: %{lowerfence:.2f}<br>"
-                        "Max: %{upperfence:.2f}<extra></extra>"
-                    ),
-                ))
-
-            fig.update_layout(**card_layout(
-                title=f"{box_feat} — spread by class",
-                ylab=box_feat,
-                height=440,
-            ))
-            fig.update_layout(boxmode="group")
-            st.plotly_chart(fig, use_container_width=True, config=CFG)
-
+    # ── SCATTERPLOT ────────────────────────────────────
     with tab_scatter:
-        st.markdown(
-            '<div class="sec-sub">Select any two features to explore their bivariate relationship, '
-            'colored by mushroom class.</div>',
-            unsafe_allow_html=True,
-        )
+        st.subheader("Relationship Between Two Features")
 
         feat_options = [c for c in df_clean.columns if c != "class" and df_clean[c].var() > 0]
 
@@ -499,6 +484,21 @@ else:
             y_feat = st.selectbox("Y axis", feat_options, index=feat_options.index("stalk-root"), key="sc_y")
         with sc3:
             n_pts = st.slider("Sample size", 200, min(3000, len(df)), 800, step=100, key="sc_n")
+
+        with st.expander("Label guide for selected variables"):
+            if x_feat in label_map:
+                st.markdown(f"**{x_feat}**")
+                for k, v in label_map[x_feat].items():
+                    st.write(f"{k}: {v}")
+
+            if y_feat in label_map:
+                st.markdown(f"**{y_feat}**")
+                for k, v in label_map[y_feat].items():
+                    st.write(f"{k}: {v}")
+
+            st.markdown("**class**")
+            for k, v in label_map["class"].items():
+                st.write(f"{k}: {v}")
 
         rng = np.random.default_rng(42)
         sample = df.sample(n_pts, random_state=42).copy()
@@ -533,51 +533,13 @@ else:
         ))
         st.plotly_chart(fig, use_container_width=True, config=CFG)
 
+    # ── CORRELATION HEATMAP ────────────────────────────
     with tab_heatmap:
-        st.markdown(
-            '<div class="sec-sub">Pearson r between all features. '
-            'Red = positive correlation, blue = negative. '
-            'veil-type excluded (zero variance).</div>',
-            unsafe_allow_html=True,
-        )
+        st.subheader("Correlation Matrix")
 
-        corr = df_clean.corr().round(3)
-        cols = corr.columns.tolist()
+        corr = df_clean.corr()
 
-        fig = go.Figure(go.Heatmap(
-            z=corr.values,
-            x=cols,
-            y=cols,
-            colorscale=[
-                [0.0, "#1a5fa8"],
-                [0.3, "#6aaed6"],
-                [0.5, "#f5f5f5"],
-                [0.7, "#f4a582"],
-                [1.0, "#c0182a"],
-            ],
-            zmin=-1,
-            zmax=1,
-            text=corr.values,
-            texttemplate="%{text:.2f}",
-            textfont=dict(size=9),
-            hovertemplate="<b>%{y}</b> × <b>%{x}</b><br>r = %{z:.3f}<extra></extra>",
-            colorbar=dict(
-                title=dict(text="r", font=dict(size=12)),
-                tickvals=[-1, -0.5, 0, 0.5, 1],
-                ticktext=["-1.0", "-0.5", "0.0", "0.5", "1.0"],
-                thickness=12,
-                len=0.82,
-            ),
-        ))
-
-        fig.update_layout(
-            title=dict(text="Correlation Matrix Heatmap", font=dict(size=12, color=TICK), x=0.5),
-            paper_bgcolor=CARD,
-            plot_bgcolor=CARD,
-            font=dict(color=TICK, size=10),
-            xaxis=dict(tickangle=-40, side="bottom", tickfont=dict(size=10)),
-            yaxis=dict(tickfont=dict(size=10)),
-            height=540,
-            margin=dict(l=120, r=50, t=50, b=110),
-        )
-        st.plotly_chart(fig, use_container_width=True, config=CFG)
+        fig, ax = plt.subplots(figsize=(12, 8))
+        sns.heatmap(corr, annot=True, cmap="coolwarm", fmt=".2f", ax=ax)
+        ax.set_title("Correlation Heatmap")
+        st.pyplot(fig)
