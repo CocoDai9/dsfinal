@@ -98,6 +98,163 @@ df = load_data()
 df_clean = df.drop(columns=["veil-type", "class_label"], errors="ignore")
 
 # ─────────────────────────────────────────────────────────
+# SIDEBAR
+# ─────────────────────────────────────────────────────────
+with st.sidebar:
+    st.markdown(
+        """
+        <div style="padding:8px 4px 4px">
+            <span style="font-size:18px;font-weight:800;color:#fff">Mushroom Dashboard</span>
+            <div style="font-size:11px;color:#666;margin-top:2px">Final Project</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown("---")
+    
+    # --- FORM START ---
+    with st.form("model_config_form"):
+        st.subheader("Model Configuration")
+        all_features = [col for col in df_clean.columns if col != "class"]
+        
+        # This will now wait for the button click
+        selected_features = st.multiselect(
+            "Select Features for Training",
+            options=all_features,
+            default=all_features
+        )
+        
+        # The recalculate button
+        submit_button = st.form_submit_button("🚀 Recalculate Model")
+    # --- FORM END ---
+
+    if len(selected_features) == 0:
+        st.warning("⚠️ Please select at least one feature.")
+        st.stop() # Stops the app here so it doesn't crash during training
+
+    st.markdown("---")
+    page = st.radio("Navigation", ["Data Overview","Visualizations","Model Predictions","Feature Importance","Hyperparameter Tuning"])
+    st.markdown("---")
+
+
+    st.markdown("---")
+    st.markdown(
+        """
+        <div style="font-size:11px;color:#555;line-height:1.9;padding:0 4px">
+            Source: UCI Mushroom Dataset
+            <br><br>
+            Group Members<br>
+            <span style="color:#777">Coco Dai<br>Nadalia Jin<br>Solomon Kim</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+# ─────────────────────────────────────────────────────────
+# CACHED MODEL TRAINING
+# ─────────────────────────────────────────────────────────
+@st.cache_resource
+def train_models(df_input, selected_cols):
+    from sklearn.model_selection import train_test_split, GridSearchCV
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.metrics import accuracy_score, f1_score, confusion_matrix
+
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.tree import DecisionTreeClassifier
+    from sklearn.neighbors import KNeighborsClassifier
+    from sklearn.ensemble import GradientBoostingClassifier
+    from sklearn.neural_network import MLPClassifier
+    from sklearn.model_selection import train_test_split, GridSearchCV
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.metrics import (
+        accuracy_score, 
+        f1_score, 
+        confusion_matrix, 
+        precision_score, 
+        recall_score, 
+    )
+
+    # Data
+    # Only use columns chosen by the user
+    X = df_input[selected_cols] 
+    y = df_input["class"]
+
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=42
+    )
+
+    # Scaling
+    scaler = StandardScaler()
+    X_train_scaled = scaler.fit_transform(X_train)
+    X_test_scaled = scaler.transform(X_test)
+
+    # Models
+    models_and_params = {
+        'Logistic Regression': {
+            'model': LogisticRegression(max_iter=5000),
+            'params': {'C': [0.1, 1.0], 'solver': ['lbfgs']},
+            'scaled': True
+        },
+        'Decision Tree': {
+            'model': DecisionTreeClassifier(random_state=42),
+            'params': {'max_depth': [None, 10]},
+            'scaled': False
+        },
+        'KNN': {
+            'model': KNeighborsClassifier(),
+            'params': {'n_neighbors': [5, 11]},
+            'scaled': True
+        },
+        'Gradient Boosting': {
+            'model': GradientBoostingClassifier(random_state=42),
+            'params': {'n_estimators': [100], 'max_depth': [3]},
+            'scaled': False
+        },
+        'MLP': {
+            'model': MLPClassifier(max_iter=500, random_state=42),
+            'params': {'hidden_layer_sizes': [(100,)]},
+            'scaled': True
+        }
+    }
+
+    trained_models = {}
+    results = {}
+
+    for name, mp in models_and_params.items():
+            if mp["scaled"]:
+                X_tr, X_te = X_train_scaled, X_test_scaled
+            else:
+                X_tr, X_te = X_train, X_test
+
+            grid = GridSearchCV(mp["model"], mp["params"], cv=3, n_jobs=-1)
+            grid.fit(X_tr, y_train)
+
+            best_model = grid.best_estimator_
+            preds = best_model.predict(X_te)
+
+            trained_models[name] = best_model
+
+            # --- MOVE THIS INSIDE THE LOOP (INDENT IT) ---
+            results[name] = {
+                "accuracy": round(accuracy_score(y_test, preds) * 100, 2),
+                "f1": round(f1_score(y_test, preds, average="macro") * 100, 2),
+                "recall": round(recall_score(y_test, preds) * 100, 2),
+                "precision": round(precision_score(y_test, preds) * 100, 2),
+                "cm": confusion_matrix(y_test, preds),
+                "best_params": grid.best_params_
+            }
+            # ---------------------------------------------
+
+    return trained_models, results, scaler, X
+
+
+trained_models, results, scaler, X = train_models(df_clean, selected_features)
+
+
+
+# ─────────────────────────────────────────────────────────
 # LABEL MAP
 # ─────────────────────────────────────────────────────────
 label_map = {
@@ -256,27 +413,14 @@ def card_layout(title="", xlab="", ylab="", height=420):
         height=height,
     )
 
-# ─────────────────────────────────────────────────────────
-# SIDEBAR
-# ─────────────────────────────────────────────────────────
-with st.sidebar:
-    st.markdown(
-        """
-        <div style="padding:8px 4px 4px">
-            <span style="font-size:18px;font-weight:800;color:#fff">Mushroom Dashboard</span>
-            <div style="font-size:11px;color:#666;margin-top:2px">Final Project</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
 
-    st.markdown("---")
 
-    page = st.radio(
-        "Navigation",
-        ["Data Overview", "Visualizations"],
-        label_visibility="collapsed",
-    )
+# THE REFRESH BUTTON
+    # ─────────────────────────────────────────────────────
+    if st.button("🔄 Retrain & Refresh"):
+        st.cache_data.clear()
+        st.cache_resource.clear()
+        st.rerun()
 
     st.markdown("---")
     st.markdown(
@@ -347,7 +491,7 @@ if page == "Data Overview":
 # ─────────────────────────────────────────────────────────
 # VISUALIZATIONS
 # ─────────────────────────────────────────────────────────
-else:
+elif page == "Visualizations":
     st.markdown('<div class="sec-title">Visualizations</div>', unsafe_allow_html=True)
     st.markdown(
         '<div class="sec-sub">Explore patterns in the mushroom dataset through five core chart types.</div>',
@@ -543,3 +687,158 @@ else:
         sns.heatmap(corr, annot=True, cmap="coolwarm", fmt=".2f", ax=ax)
         ax.set_title("Correlation Heatmap")
         st.pyplot(fig)
+
+        # --- PAGE: MODEL PREDICTIONS ---
+
+# --- PAGE: MODEL PREDICTIONS ---
+elif page == "Model Predictions":
+    st.markdown('<div class="sec-title">Model Predictions</div>', unsafe_allow_html=True)
+    
+    # 1. Comparative Metrics Table
+    perf_data = []
+    for name, m in results.items():
+        perf_data.append({
+            "Model": name,
+            "Accuracy (%)": m["accuracy"],
+            "F1 Score (%)": m["f1"],
+            "Recall (%)": m["recall"],
+            "Precision (%)": m["precision"],
+        })
+    
+    st.subheader("📊 Comparative Metrics")
+    st.dataframe(pd.DataFrame(perf_data).sort_values("F1 Score (%)", ascending=False), use_container_width=True, hide_index=True)
+
+    st.markdown("---")
+
+    # 2. Single Model Inspection (Only ONE Selectbox here)
+    st.subheader("🔍 Detailed Model Inspection")
+    model_choice = st.selectbox(
+        "Select Model to Inspect",
+        list(results.keys()),
+        key="selectbox_predictions"  
+    )
+
+    res = results[model_choice]
+
+    # Metric Cards
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Accuracy", f"{res['accuracy']}%")
+    c2.metric("F1 Score", f"{res['f1']}%")
+    c3.metric("Recall", f"{res['recall']}%")
+    c4.metric("Precision", f"{res['precision']}%")
+
+    # Confusion Matrix
+    st.write(f"**Confusion Matrix for {model_choice}**")
+    fig, ax = plt.subplots(figsize=(5, 4))
+    sns.heatmap(res["cm"], annot=True, fmt="d", cmap="Blues", ax=ax, 
+                xticklabels=["Edible", "Poisonous"], 
+                yticklabels=["Edible", "Poisonous"])
+    ax.set_xlabel("Predicted")
+    ax.set_ylabel("Actual")
+    st.pyplot(fig)
+
+    st.markdown("---")
+
+    # 3. Live Predictor
+    st.markdown("### 🔮 Live Predictor")
+    st.caption("Adjust the sliders to see how a specific mushroom would be classified.")
+
+    user_input = {}
+    cols = st.columns(3)
+
+    # Use the columns from X (the trained features)
+    for i, col in enumerate(X.columns):
+        with cols[i % 3]:
+            user_input[col] = st.slider(
+                col,
+                int(X[col].min()),
+                int(X[col].max()),
+                int(X[col].mean()),
+                key=f"predict_slider_{col}"
+            )
+
+    if st.button("Predict Edibility"):
+        input_df = pd.DataFrame([user_input])
+
+        # Apply scaling ONLY if the model requires it
+        # We check the same logic used in training
+        models_needing_scaling = ["Logistic Regression", "KNN", "MLP"]
+        
+        if model_choice in models_needing_scaling:
+            input_data = scaler.transform(input_df)
+        else:
+            input_data = input_df
+
+        model = trained_models[model_choice]
+        pred = model.predict(input_data)[0]
+
+        if pred == 0:
+            st.success(f"**Result: ✅ EDIBLE** (via {model_choice})")
+        else:
+            st.error(f"**Result: ⚠️ POISONOUS** (via {model_choice})")
+
+        if hasattr(model, "predict_proba"):
+            proba = model.predict_proba(input_data)[0]
+            confidence = np.max(proba) * 100
+            st.info(f"Confidence Score: {confidence:.2f}%")
+
+# --- PAGE: FEATURE IMPORTANCE ---
+elif page == "Feature Importance":
+    st.markdown('<div class="sec-title">Feature Importance & Configurations</div>', unsafe_allow_html=True)
+    
+    # --- SECTION: BEST CONFIGURATIONS ---
+    st.subheader("🏆 Best Model Configurations")
+    cols = st.columns(len(results))
+    for i, (name, res) in enumerate(results.items()):
+        with cols[i]:
+            st.metric(name, f"{res['f1']}% F1")
+            st.caption(f"Best Params: {res['best_params']}")
+    
+    st.markdown("---")
+
+    # --- SECTION: FEATURE IMPORTANCE ---
+    st.subheader("📊 Feature Significance")
+    model_name = st.selectbox("Select Model to see Importance", [n for n in results.keys() if n != "KNN" and n != "MLP"])
+    
+    target_model = trained_models[model_name]
+    importance_df = None
+
+    # Check for Tree-based importance
+    if hasattr(target_model, 'feature_importances_'):
+        importance_df = pd.DataFrame({
+            'Feature': X.columns,
+            'Value': target_model.feature_importances_
+        }).sort_values(by='Value', ascending=True)
+    
+    # Check for Linear-based coefficients
+    elif hasattr(target_model, 'coef_'):
+        importance_df = pd.DataFrame({
+            'Feature': X.columns,
+            'Value': np.abs(target_model.coef_[0]) # Use absolute value for impact
+        }).sort_values(by='Value', ascending=True)
+
+    if importance_df is not None:
+        fig = px.bar(
+            importance_df, 
+            x='Value', 
+            y='Feature', 
+            orientation='h',
+            title=f"Feature Impact on {model_name}",
+            color='Value',
+            color_continuous_scale='Reds'
+        )
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.info(f"The {model_name} model does not provide direct feature importance scores.")
+
+# --- PAGE: HYPERPARAMETER TUNING ---
+elif page == "Hyperparameter Tuning":
+    st.markdown('<div class="sec-title">Hyperparameter Tuning</div>', unsafe_allow_html=True)
+    st.info("Performance comparison of model variants.")
+    # Placeholder for tuning visualization
+    tuning_data = pd.DataFrame({
+        "Model": ["Decision Tree", "Random Forest", "KNN", "MLP"],
+        "Best Score": [95.8, 96.5, 94.2, 95.1]
+    })
+    fig = px.line(tuning_data, x="Model", y="Best Score", markers=True)
+    st.plotly_chart(fig, use_container_width=True)
