@@ -5,6 +5,25 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import plotly.graph_objects as go
 
+# --- ADD THESE HERE ---
+from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import (
+    accuracy_score, 
+    f1_score, 
+    confusion_matrix, 
+    precision_score, 
+    recall_score
+)
+from sklearn.linear_model import LogisticRegression
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.ensemble import GradientBoostingClassifier
+from sklearn.neural_network import MLPClassifier
+from sklearn.inspection import permutation_importance
+import plotly.express as px
+# ----------------------
+
 # ─────────────────────────────────────────────────────────
 # PAGE CONFIG
 # ─────────────────────────────────────────────────────────
@@ -136,9 +155,6 @@ with st.sidebar:
     st.markdown("---")
     page = st.radio("Navigation", ["Data Overview","Visualizations","Model Predictions","Feature Importance","Hyperparameter Tuning"])
     st.markdown("---")
-
-
-    st.markdown("---")
     st.markdown(
         """
         <div style="font-size:11px;color:#555;line-height:1.9;padding:0 4px">
@@ -193,28 +209,44 @@ def train_models(df_input, selected_cols):
     # Models
     models_and_params = {
         'Logistic Regression': {
-            'model': LogisticRegression(max_iter=5000),
-            'params': {'C': [0.1, 1.0], 'solver': ['lbfgs']},
+            'model': LogisticRegression(max_iter=2000),
+            'params': {
+                'C': [0.1, 1.0, 10.0], 
+                'solver': ['lbfgs', 'liblinear']
+            },
             'scaled': True
         },
         'Decision Tree': {
             'model': DecisionTreeClassifier(random_state=42),
-            'params': {'max_depth': [None, 10]},
+            'params': {
+                'max_depth': [5, 10, None],
+                'min_samples_split': [2, 10]
+            },
             'scaled': False
         },
         'KNN': {
             'model': KNeighborsClassifier(),
-            'params': {'n_neighbors': [5, 11]},
+            'params': {
+                'n_neighbors': [3, 7, 15], 
+                'weights': ['uniform', 'distance']
+            },
             'scaled': True
         },
         'Gradient Boosting': {
             'model': GradientBoostingClassifier(random_state=42),
-            'params': {'n_estimators': [100], 'max_depth': [3]},
+            'params': {
+                'n_estimators': [100, 200],
+                'max_depth': [3, 5],
+                'learning_rate': [0.1]
+            },
             'scaled': False
         },
         'MLP': {
-            'model': MLPClassifier(max_iter=500, random_state=42),
-            'params': {'hidden_layer_sizes': [(100,)]},
+            'model': MLPClassifier(max_iter=1000, random_state=42),
+            'params': {
+                'hidden_layer_sizes': [(100,), (50, 50)],
+                'alpha': [0.0001, 0.01]
+            },
             'scaled': True
         }
     }
@@ -784,61 +816,170 @@ elif page == "Model Predictions":
 
 # --- PAGE: FEATURE IMPORTANCE ---
 elif page == "Feature Importance":
-    st.markdown('<div class="sec-title">Feature Importance & Configurations</div>', unsafe_allow_html=True)
+    import plotly.express as px
+    from sklearn.inspection import permutation_importance
     
-    # --- SECTION: BEST CONFIGURATIONS ---
-    st.subheader("🏆 Best Model Configurations")
+    st.markdown('<div class="sec-title">Feature Importance & Safety Metrics</div>', unsafe_allow_html=True)
+    
+    # --- SECTION 1: BEST CONFIGURATIONS (Focusing on RECALL) ---
+    st.subheader("🛡️ Safety Performance (Recall & Parameters)")
+    st.caption("Recall measures the percentage of poisonous mushrooms caught. Higher is safer.")
+    
+    # Display Recall and the Best Params found during GridSearchCV
     cols = st.columns(len(results))
     for i, (name, res) in enumerate(results.items()):
         with cols[i]:
-            st.metric(name, f"{res['f1']}% F1")
-            st.caption(f"Best Params: {res['best_params']}")
+            st.metric(name, f"{res['recall']}% Rec")
+            # Displaying the specific hyperparameter used
+            st.write(f"**Params:** `{res['best_params']}`")
     
     st.markdown("---")
 
-    # --- SECTION: FEATURE IMPORTANCE ---
-    st.subheader("📊 Feature Significance")
-    model_name = st.selectbox("Select Model to see Importance", [n for n in results.keys() if n != "KNN" and n != "MLP"])
+    # --- SECTION 2: FEATURE SIGNIFICANCE FOR ALL MODELS ---
+    st.subheader("📊 Global Feature Significance")
+    st.markdown("""
+    *Note: For KNN and MLP, we use **Permutation Importance**, which calculates how much the model performance 
+    drops when a feature's values are shuffled.*
+    """)
     
+    model_name = st.selectbox("Select Model to see Significance", list(results.keys()))
     target_model = trained_models[model_name]
-    importance_df = None
 
-    # Check for Tree-based importance
+    # Logic to handle different model types
     if hasattr(target_model, 'feature_importances_'):
-        importance_df = pd.DataFrame({
-            'Feature': X.columns,
-            'Value': target_model.feature_importances_
-        }).sort_values(by='Value', ascending=True)
-    
-    # Check for Linear-based coefficients
+        # Decision Tree / Gradient Boosting
+        val = target_model.feature_importances_
+        title_suffix = "(Gini Importance)"
     elif hasattr(target_model, 'coef_'):
-        importance_df = pd.DataFrame({
-            'Feature': X.columns,
-            'Value': np.abs(target_model.coef_[0]) # Use absolute value for impact
-        }).sort_values(by='Value', ascending=True)
-
-    if importance_df is not None:
-        fig = px.bar(
-            importance_df, 
-            x='Value', 
-            y='Feature', 
-            orientation='h',
-            title=f"Feature Impact on {model_name}",
-            color='Value',
-            color_continuous_scale='Reds'
-        )
-        st.plotly_chart(fig, use_container_width=True)
+        # Logistic Regression
+        val = np.abs(target_model.coef_[0])
+        title_suffix = "(Model Coefficients)"
     else:
-        st.info(f"The {model_name} model does not provide direct feature importance scores.")
+        # KNN / MLP (Permutation Importance)
+        # We use a small sample to speed up the dashboard
+        with st.spinner("Calculating Permutation Importance..."):
+            # Scaling X if required by model
+            X_eval = scaler.transform(X) if model_name in ["KNN", "MLP", "Logistic Regression"] else X
+            r = permutation_importance(target_model, X_eval, df_clean["class"], n_repeats=5, random_state=42)
+            val = r.importances_mean
+            title_suffix = "(Permutation Importance)"
+
+    importance_df = pd.DataFrame({
+        'Feature': X.columns,
+        'Value': val
+    }).sort_values(by='Value', ascending=True)
+
+    fig = px.bar(
+        importance_df, 
+        x='Value', 
+        y='Feature', 
+        orientation='h',
+        title=f"Feature Impact on {model_name} {title_suffix}",
+        color='Value',
+        color_continuous_scale='Reds',
+        template="plotly_dark"
+    )
+    fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)')
+    st.plotly_chart(fig, use_container_width=True)
 
 # --- PAGE: HYPERPARAMETER TUNING ---
+# --- PAGE: HYPERPARAMETER TUNING ---
 elif page == "Hyperparameter Tuning":
-    st.markdown('<div class="sec-title">Hyperparameter Tuning</div>', unsafe_allow_html=True)
-    st.info("Performance comparison of model variants.")
-    # Placeholder for tuning visualization
-    tuning_data = pd.DataFrame({
-        "Model": ["Decision Tree", "Random Forest", "KNN", "MLP"],
-        "Best Score": [95.8, 96.5, 94.2, 95.1]
-    })
-    fig = px.line(tuning_data, x="Model", y="Best Score", markers=True)
-    st.plotly_chart(fig, use_container_width=True)
+    st.markdown('<div class="sec-title">Hyperparameter Tuning Sandbox</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sec-sub">Manually tune hyperparameters to observe real-time impact on model safety (Recall).</div>', unsafe_allow_html=True)
+
+    # 1. Model Selection (Full List)
+    tune_model_name = st.selectbox(
+        "Select Model to Tune",
+        ["Logistic Regression", "Decision Tree", "KNN", "Gradient Boosting", "MLP"],
+        key="tune_model_select"
+    )
+
+    st.markdown("---")
+    t_left, t_right = st.columns([1, 2])
+
+    with t_left:
+        st.subheader("⚙️ Tuning Parameters")
+        
+        if tune_model_name == "Logistic Regression":
+            c_val = st.select_slider("Regularization (C)", options=[0.01, 0.1, 1.0, 10.0, 100.0], value=1.0)
+            solv = st.selectbox("Solver", ["lbfgs", "liblinear"])
+            custom_model = LogisticRegression(C=c_val, solver=solv, max_iter=2000)
+            is_scaled = True
+
+        elif tune_model_name == "Decision Tree":
+            depth = st.slider("Max Depth", 1, 20, 5)
+            min_split = st.slider("Min Samples Split", 2, 20, 2)
+            custom_model = DecisionTreeClassifier(max_depth=depth, min_samples_split=min_split, random_state=42)
+            is_scaled = False
+
+        elif tune_model_name == "KNN":
+            k = st.slider("Neighbors (K)", 1, 31, 5, step=2)
+            w = st.selectbox("Weights", ["uniform", "distance"])
+            custom_model = KNeighborsClassifier(n_neighbors=k, weights=w)
+            is_scaled = True
+
+        elif tune_model_name == "Gradient Boosting":
+            n_est = st.slider("Number of Trees (n_estimators)", 10, 300, 100, step=10)
+            lr = st.select_slider("Learning Rate", options=[0.01, 0.05, 0.1, 0.2, 0.5], value=0.1)
+            g_depth = st.slider("Tree Depth", 1, 10, 3)
+            custom_model = GradientBoostingClassifier(n_estimators=n_est, learning_rate=lr, max_depth=g_depth, random_state=42)
+            is_scaled = False
+
+        elif tune_model_name == "MLP":
+            h_size = st.selectbox("Hidden Layer Architecture", [(50,), (100,), (50, 50), (100, 50)], index=1)
+            alpha_val = st.select_slider("Alpha (Regularization)", options=[0.0001, 0.001, 0.01, 0.1], value=0.0001)
+            custom_model = MLPClassifier(hidden_layer_sizes=h_size, alpha=alpha_val, max_iter=1000, random_state=42)
+            is_scaled = True
+
+        # --- Mini-Training Logic ---
+        from sklearn.model_selection import train_test_split
+        from sklearn.metrics import recall_score, accuracy_score, confusion_matrix
+
+        with st.spinner(f"Retraining {tune_model_name}..."):
+            X_t = df_clean[selected_features]
+            y_t = df_clean["class"]
+            xtr, xte, ytr, yte = train_test_split(X_t, y_t, test_size=0.2, random_state=42)
+
+            if is_scaled:
+                from sklearn.preprocessing import StandardScaler
+                sc = StandardScaler()
+                xtr = sc.fit_transform(xtr)
+                xte = sc.transform(xte)
+
+            custom_model.fit(xtr, ytr)
+            t_preds = custom_model.predict(xte)
+            
+            t_rec = round(recall_score(yte, t_preds) * 100, 2)
+            t_acc = round(accuracy_score(yte, t_preds) * 100, 2)
+            t_cm = confusion_matrix(yte, t_preds)
+
+    with t_right:
+        st.subheader("📈 Performance Impact")
+        
+        m_col1, m_col2 = st.columns(2)
+        m_col1.metric("Safety (Recall)", f"{t_rec}%")
+        m_col2.metric("Accuracy", f"{t_acc}%")
+
+        fig, ax = plt.subplots(figsize=(6, 4))
+        # We use a color scale that shifts to green only when we catch all poisonous mushrooms
+        sns.heatmap(t_cm, annot=True, fmt="d", cmap="YlOrRd" if t_rec < 100 else "Greens", ax=ax,
+                    xticklabels=["Edible", "Poisonous"], 
+                    yticklabels=["Edible", "Poisonous"])
+        ax.set_xlabel("Predicted")
+        ax.set_ylabel("Actual")
+        st.pyplot(fig)
+
+        if t_rec < 100:
+            st.error(f"❌ Danger: This {tune_model_name} config missed {t_cm[1,0]} poisonous mushrooms.")
+        else:
+            st.success(f"✅ Safe: This {tune_model_name} config caught 100% of poisonous mushrooms.")
+
+    st.markdown("---")
+    st.subheader("Model Specific Tuning Tips")
+    if tune_model_name == "Gradient Boosting":
+        st.write("- **Learning Rate:** High values train faster but might overshoot. Low values need more trees.")
+        st.write("- **n_estimators:** More trees generally improve Recall but increase training time.")
+    elif tune_model_name == "MLP":
+        st.write("- **Hidden Layers:** `(50, 50)` is deeper and better for complex patterns.")
+        st.write("- **Alpha:** Controls 'Weight Decay'. Higher values prevent the neural net from over-fitting.")
